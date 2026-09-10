@@ -3,144 +3,88 @@ package com.aland.securechat
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.aland.securechat.crypto.SessionCrypto
 import com.aland.securechat.identity.IdentityManager
-
-data class ChatMessage(val text: String, val mine: Boolean)
+import com.aland.securechat.transport.NtfyClient
+import java.util.UUID
+import java.util.concurrent.Executors
 
 class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContent { SecureChatApp() }
-    }
+    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { App() } }
 }
 
+data class UiMsg(val text: String, val mine: Boolean)
+
 @Composable
-private fun SecureChatApp() {
+private fun App() {
     val context = androidx.compose.ui.platform.LocalContext.current
     val identity = remember { IdentityManager(context) }
-
-    var username by remember { mutableStateOf("Aland") }
-    var profileSignature by remember { mutableStateOf<String?>(null) }
+    val ntfy = remember { NtfyClient() }
+    val executor = remember { Executors.newSingleThreadExecutor() }
+    var topic by remember { mutableStateOf("sc-demo-${UUID.randomUUID().toString().replace("-", "")}") }
+    var peerKey by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
-    val fingerprint = remember { identity.fingerprint() }
+    var status by remember { mutableStateOf("Create a session with a peer public key") }
+    var sessionKey by remember { mutableStateOf<ByteArray?>(null) }
+    val messages = remember { mutableStateListOf<UiMsg>() }
 
-    val messages = remember {
-        mutableStateListOf(
-            ChatMessage("SecureChat v0.2", false),
-            ChatMessage(
-                "Identity key generated locally and protected by Android Keystore.",
-                false
-            )
-        )
-    }
+    DisposableEffect(Unit) { onDispose { executor.shutdownNow() } }
 
     MaterialTheme {
-        Surface(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(16.dp)
-            ) {
+        Surface(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("SecureChat", style = MaterialTheme.typography.headlineMedium)
-                Text(
-                    "Cryptographic identity • v0.2.0",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-
-                Spacer(Modifier.height(12.dp))
-
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            "Your cryptographic identity",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Text("Fingerprint", style = MaterialTheme.typography.labelMedium)
-                        Text(fingerprint, style = MaterialTheme.typography.bodySmall)
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = username,
-                            onValueChange = { username = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            label = { Text("Profile name") }
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Button(onClick = {
-                            profileSignature = identity.signProfile(
-                                username.trim().ifBlank { "Aland" },
-                                System.currentTimeMillis()
-                            )
-                        }) {
-                            Text("Sign profile")
-                        }
-                        profileSignature?.let {
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                "Profile signed locally. Signature length: ${it.length} chars.",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
-
-                LazyColumn(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(messages) { item ->
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                if (item.mine) "You: ${item.text}"
-                                else "SecureChat: ${item.text}",
-                                modifier = Modifier.padding(12.dp)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = message,
-                        onValueChange = { message = it },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        label = { Text("Message") }
-                    )
+                Text("v1.0 prototype • identity + ECDH + AES-GCM + ntfy")
+                Text("Your fingerprint: ${identity.fingerprint()}", style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(topic, { topic = it }, Modifier.fillMaxWidth(), label = { Text("ntfy mailbox topic") }, singleLine = true)
+                OutlinedTextField(peerKey, { peerKey = it }, Modifier.fillMaxWidth(), label = { Text("Peer public key (base64)") }, minLines = 2)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = {
-                        if (message.isNotBlank()) {
-                            messages.add(ChatMessage(message.trim(), true))
-                            message = ""
+                        try {
+                            val eph = SessionCrypto.newEphemeral()
+                            val peer = SessionCrypto.publicFromB64(peerKey.trim())
+                            val transcript = "SecureChat/v1|${identity.publicKeyBase64()}|$peerKey|${eph.publicB64}"
+                            sessionKey = SessionCrypto.sharedKey(eph.pair.private, peer, transcript)
+                            status = "Session key established locally. Verify fingerprints out-of-band before trusting a peer."
+                        } catch (e: Exception) { status = "Key exchange error: ${e.message}" }
+                    }) { Text("Establish") }
+                    Button(onClick = {
+                        val current = topic
+                        executor.execute {
+                            try { val code = ntfy.publish(current, "SC1|${identity.publicKeyBase64()}"); runOnUiThread { status = "ntfy response: $code" } }
+                            catch (e: Exception) { runOnUiThread { status = "ntfy error: ${e.message}" } }
                         }
-                    }) {
-                        Text("Send")
-                    }
+                    }) { Text("Ping relay") }
                 }
+                Text(status, style = MaterialTheme.typography.bodySmall)
+                HorizontalDivider()
+                LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(messages) { m -> Card(Modifier.fillMaxWidth()) { Text(if (m.mine) "You: ${m.text}" else "Peer: ${m.text}", Modifier.padding(10.dp)) } }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(message, { message = it }, Modifier.weight(1f), singleLine = true, label = { Text("Message") })
+                    Button(enabled = sessionKey != null, onClick = {
+                        val key = sessionKey ?: return@Button
+                        if (message.isBlank()) return@Button
+                        try {
+                            val aad = "SecureChat/v1|$topic|${messages.size}"
+                            val box = SessionCrypto.encrypt(key, message, aad)
+                            val wire = "SC1|$aad|${box.nonceB64}|${box.cipherB64}"
+                            executor.execute {
+                                try { val code = ntfy.publish(topic, wire); runOnUiThread { messages.add(UiMsg(message, true)); message = ""; status = "Encrypted ciphertext sent. HTTP $code" } }
+                                catch (e: Exception) { runOnUiThread { status = "Send error: ${e.message}" } }
+                            }
+                        } catch (e: Exception) { status = "Encryption error: ${e.message}" }
+                    }) { Text("Send") }
+                }
+                Text("Prototype warning: this is not audited and does not yet implement a full Signal-style Double Ratchet. Do not use for high-stakes secrets.", style = MaterialTheme.typography.bodySmall)
             }
         }
     }

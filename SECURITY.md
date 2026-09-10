@@ -1,17 +1,12 @@
-# Security
+# SecureChat v1.0 prototype security model
 
-SecureChat is an experimental project.
+This prototype combines device identity, authenticated-profile signatures, an ephemeral P-256 ECDH session, HKDF-SHA-256 key derivation, AES-256-GCM message encryption, and ntfy as a ciphertext relay.
 
-Do not use it for sensitive communications until the cryptographic protocol,
-implementation, dependency chain, and build process have undergone appropriate
-security review.
+The relay is intentionally treated as untrusted transport. ntfy supports HTTP publish and streaming subscriptions; SecureChat sends ciphertext rather than plaintext once a session is established.
 
-## Design rules
-
-- Never invent a cryptographic primitive.
-- Never store private identity keys on a server.
-- Never commit API keys, passwords, signing keys, or private cryptographic keys.
-- Prefer established protocols and audited implementations.
-- Treat metadata as sensitive.
-- Verify cryptographic identity keys when possible.
-- Keep cryptographic operations isolated from UI/network code.
+Important limitations:
+- This is a prototype, not a security-audited messenger.
+- The UI currently requires manual peer public-key exchange.
+- It does not yet implement a complete Signal Double Ratchet, multi-device state machine, sealed-sender design, or robust background notification service.
+- Metadata such as topic names, timing, message size, and network addresses are not hidden by E2EE.
+- Do not use it for genuinely sensitive communications until independently reviewed.
