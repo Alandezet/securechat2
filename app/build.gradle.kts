@@ -1,24 +1,24 @@
-plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-}
+plugins { id("com.android.application") }
 
 android {
     namespace = "com.securechat.app"
-    compileSdk = 34
-
+    compileSdk = 35
     defaultConfig {
         applicationId = "com.securechat.app"
         minSdk = 26
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        targetSdk = 35
+        versionCode = 2
+        versionName = "0.2.0"
+        val relay = providers.gradleProperty("cipherOrigin").orElse("").get()
+        require(relay.isEmpty() || (relay.startsWith("https://") && !relay.contains('"') && !relay.contains('\\'))) {
+            "cipherOrigin must be an HTTPS origin."
+        }
+        buildConfigField("String", "CIPHER_ORIGIN", "\"$relay\"")
     }
-
+    buildFeatures { buildConfig = true }
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -26,35 +26,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-    buildFeatures {
-        compose = true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.8"
-    }
+    lint { abortOnError = true }
 }
-
-dependencies {
-    implementation("androidx.core:core-ktx:1.12.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
-    implementation("androidx.activity:activity-compose:1.8.2")
-    implementation(platform("androidx.compose:compose-bom:2024.02.00"))
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3")
-    
-    // Cryptography & Storage
-    implementation("com.google.crypto.tink:tink-android:1.12.0")
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
-    
-    // Networking
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    
-    // Testing
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("org.json:json:20231013")
-}
+// No runtime Android libraries or tracking SDKs. The same reviewed-by-tests web
+// client is bundled locally by `npm run android:sync` before Gradle packaging.

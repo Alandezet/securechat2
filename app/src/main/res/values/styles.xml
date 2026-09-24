@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.SecureChat" parent="android:style/Theme.Material.NoActionBar" />
+    <style name="Theme.Cipher" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">#F6F7F3</item>
+        <item name="android:navigationBarColor">#193E33</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:colorAccent">#34593E</item>
+        <item name="android:windowBackground">#F6F7F3</item>
+    </style>
 </resources>
