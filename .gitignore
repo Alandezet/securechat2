@@ -8,3 +8,17 @@ app/build/
 .cxx/
 *.keystore
 *.jks
+node_modules/
+dist/
+.data/
+.env
+.env.*
+!.env.example
+playwright-report/
+test-results/
+*.tsbuildinfo
+app/src/main/assets/web/
+.tools/
+artifacts/
+
+image-search/
